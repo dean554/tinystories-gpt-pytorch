@@ -1,0 +1,38 @@
+import os
+
+# CHANGED: point this at whichever checkpoint you want to resume from
+checkpoint_path = "/kaggle/input/datasets/ainsgown/tiny-stories-dataset/tiny_stories_checkpoint_step7500.pt"
+
+start_step = 0
+if os.path.exists(checkpoint_path):
+    print(f"Loading checkpoint: {checkpoint_path}")
+    ckpt = torch.load(checkpoint_path, map_location=device, weights_only=False)
+
+    # Load weights into the RAW model first, before any DataParallel wrapping.
+    # This matters because of key naming: raw_model.state_dict() was saved
+    # (not model.state_dict()), so its keys have no "module." prefix — they
+    # only match a plain GPTLanguageModel, not a DataParallel-wrapped one.
+    raw_model = GPTLanguageModel(use_checkpointing=True)
+    raw_model.load_state_dict(ckpt['model_state_dict'])
+    raw_model = raw_model.to(device)
+
+    # Re-wrap in DataParallel AFTER loading, same as your original setup code
+    if torch.cuda.device_count() > 1:
+        model = nn.DataParallel(raw_model)
+    else:
+        model = raw_model
+
+    # Optimizer needs to be built against model.parameters() first,
+    # THEN have its state loaded — the parameter objects need to already
+    # exist so the optimizer can match saved state to the right tensors.
+    optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
+    optimizer.load_state_dict(ckpt['optimizer_state_dict'])
+
+    start_step = ckpt['step'] + 1  # resume on the NEXT step, not the same one again
+    print(f"Resumed from step {ckpt['step']}, continuing at step {start_step}")
+else:
+    print("No checkpoint found, starting fresh")
+    model = GPTLanguageModel(use_checkpointing=True).to(device)
+    if torch.cuda.device_count() > 1:
+        model = nn.DataParallel(model)
+    optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
