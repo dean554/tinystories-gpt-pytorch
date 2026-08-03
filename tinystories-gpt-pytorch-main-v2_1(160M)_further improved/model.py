@@ -153,8 +153,7 @@ class GPTLanguageModel(nn.Module):
         return idx
 
 
-# CHANGED: checkpointing off by default now — T4s have 15GiB and your
-# screenshot showed near-zero usage, so recomputation was pure overhead.
+
 model = GPTLanguageModel(use_checkpointing=True).to(device)
 
 for name, p in model.named_parameters():
