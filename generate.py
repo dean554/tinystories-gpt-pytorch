@@ -7,7 +7,7 @@ from tokenizers import Tokenizer
 import numpy
 
 tokenizer_path = "/kaggle/working/tinystories_vocab.json"
-checkpoint_path = "/kaggle/working/tiny_stories_finetuned_best.pts" 
+checkpoint_path = "/kaggle/working/tiny_stories_finetuned_best.pt" 
 
 emb_dim = 1024
 block_size = 512
