@@ -25,10 +25,12 @@ With: Happy end
 
 | Stage | Steps | Final train loss | Final val loss |
 |-------|-------|------------------|----------------|
-| Pretraining (TinyStories) | 30,000 planned (log shown up to ~9,900; checkpoint at 12,000 used for generation) | 1.3653 (step 9,900) | 1.3783 (step 9,900) |
-| Fine-tuning | stopped early at 1,050 | 1.1443 | 1.1514 |
+| Pretraining (TinyStories) | 12,000 (checkpoint used for fine-tuning and generation; 30,000 planned) | 1.3324 | 1.3974 |
+| Fine-tuning (TinyStories-Instruct) | stopped early at 1,050 | 1.1443 | 1.1514 |
 
-Fine-tuning validation loss dropped from 2.5583 at step 0 to about 1.15, and training stopped automatically once validation loss stopped improving (patience of 5 evaluations).
+Pretraining validation loss fluctuates between roughly 1.34 and 1.40 around step 12,000 (it reads 1.3606 at step 12,900), since each evaluation uses only 10 random batches.
+
+Fine-tuning started from the step 12,000 pretrained checkpoint. Validation loss dropped from 2.5583 at step 0 to about 1.15 (best: 1.1512 at step 800), and training stopped automatically once validation loss stopped improving (patience of 5 evaluations).
 
 ## Model Architecture
 
@@ -36,7 +38,7 @@ A decoder-only Transformer implemented without any prebuilt Transformer modules:
 
 | Setting | Value |
 |---------|-------|
-| Parameters | 160M |
+| Parameters | 159,844,160 (~160M), about 639 MB in fp32 or 320 MB in fp16 |
 | Layers | 12 |
 | Embedding size | 1024 |
 | Attention heads | 8 (head size 128) |
@@ -85,7 +87,7 @@ Tokenizes the train and validation text files story by story, appends `<|endofte
 
 ### 4. Fine-tune (`finetune.py`)
 
-Continues training from a pretraining checkpoint on an instruction-style dataset (`Write a story about: ... With: ... ### Story:`).
+Continues training from the step 12,000 pretraining checkpoint on the [tinystories-instruct-balanced](https://huggingface.co/datasets/0rn0/tinystories-instruct-balanced) dataset, an instruction-style version of TinyStories (`Write a story about: ... With: ... ### Story:`).
 
 | Setting | Value |
 |---------|-------|
@@ -96,7 +98,7 @@ Continues training from a pretraining checkpoint on an instruction-style dataset
 | Checkpoints | Best model saved as `tiny_stories_finetuned_best.pt`, plus one every 500 steps |
 | Option | `FREEZE_FIRST_N_BLOCKS` freezes the embeddings and the first N blocks (default `0`, nothing frozen) |
 
-The fine-tuning data (`finetune_train_encoded.bin`, `finetune_val_encoded.bin`) is expected in the same encoded `uint16` format as the pretraining data.
+The fine-tuning data (`finetune_train_encoded.bin`, `finetune_val_encoded.bin`) is built with `encoder.py` in the same way as the pretraining data, using the tokenizer already trained on the pretraining text (`tinystories_vocab.json`). Only the input and output paths in `encoder.py` change.
 
 ### 5. Generate (`generate.py`)
 
@@ -119,7 +121,12 @@ Set `checkpoint_path` at the top of the file to choose which model to use, for e
 pip install torch numpy tokenizers tqdm
 ```
 
-Run the scripts in this order: `vocab.py`, `encoder.py`, `model_trainloop.py`, then `finetune.py` and `generate.py`.
+Datasets:
+
+- Pretraining: [roneneldan/TinyStories](https://huggingface.co/datasets/roneneldan/TinyStories/tree/main) (`TinyStories-train.txt` and `TinyStories-valid.txt`)
+- Fine-tuning: [0rn0/tinystories-instruct-balanced](https://huggingface.co/datasets/0rn0/tinystories-instruct-balanced)
+
+Run the scripts in this order: `vocab.py`, `encoder.py` (on the pretraining files), `model_trainloop.py`, `encoder.py` again (on the fine-tuning files), then `finetune.py` and `generate.py`.
 
 The scripts use Kaggle paths (`/kaggle/input/...` for the dataset and `/kaggle/working/...` for outputs). Change the path constants at the top of each file to run locally.
 
