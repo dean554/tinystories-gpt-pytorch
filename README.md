@@ -1,6 +1,6 @@
 # TinyStories GPT (PyTorch)
 
-A GPT-style language model written from scratch in PyTorch, trained on the [TinyStories](https://huggingface.co/datasets/roneneldan/TinyStories) dataset. The repository covers the whole pipeline: training a custom BPE tokenizer, encoding the dataset, pretraining, fine-tuning on an instruction-style prompt format, and generating stories.
+A 160M-parameter GPT-style language model written from scratch in PyTorch, trained on the [TinyStories](https://huggingface.co/datasets/roneneldan/TinyStories) dataset. The repository covers the whole pipeline: training a custom BPE tokenizer, encoding the dataset, pretraining, fine-tuning on an instruction-style prompt format, and generating stories.
 
 It was built and trained on Kaggle with 2 GPUs.
 
@@ -32,10 +32,11 @@ Fine-tuning validation loss dropped from 2.5583 at step 0 to about 1.15, and tra
 
 ## Model Architecture
 
-A decoder-only Transformer (about 160M parameters) implemented without any prebuilt Transformer modules:
+A decoder-only Transformer implemented without any prebuilt Transformer modules:
 
 | Setting | Value |
 |---------|-------|
+| Parameters | 160M |
 | Layers | 12 |
 | Embedding size | 1024 |
 | Attention heads | 8 (head size 128) |
