@@ -1,7 +1,0 @@
-os.makedirs('/content/drive/MyDrive/data', exist_ok=True)
-
-!wget -O /content/drive/MyDrive/data/TinyStories-train.txt \
-    https://huggingface.co/datasets/roneneldan/TinyStories/resolve/main/TinyStories-train.txt
-
-!wget -O /content/drive/MyDrive/data/TinyStories-valid.txt \
-    https://huggingface.co/datasets/roneneldan/TinyStories/resolve/main/TinyStories-valid.txt
