@@ -6,14 +6,6 @@ from torch.utils.checkpoint import checkpoint
 from tokenizers import Tokenizer
 import numpy as np
 
-# ============================================================
-# Config
-# Architecture constants MUST match the pretraining run exactly,
-# because we're about to load a state_dict that was saved with
-# these exact shapes. Change any of these (emb_dim, num_layers,
-# num_heads, block_size) and load_state_dict will throw a shape
-# mismatch error.
-# ============================================================
 tokenizer = Tokenizer.from_file("/kaggle/working/tinystories_vocab.json")
 vocab_size = tokenizer.get_vocab_size()
 
@@ -27,9 +19,6 @@ dropout = 0.1
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
-# --- CHANGED: point these at your fine-tuning dataset, not the pretraining one.
-# Fine-tuning implies a new (usually much smaller / more specific) corpus.
-# Update these two paths to wherever your fine-tune .bin files live.
 FINETUNE_TRAIN_PATH = '/kaggle/working/finetune_train_encoded.bin'
 FINETUNE_VAL_PATH   = '/kaggle/working/finetune_val_encoded.bin'
 
@@ -44,16 +33,6 @@ def get_batch(split):
     x, y = x.to(device), y.to(device)
     return x, y
 
-
-# ============================================================
-# Model — copied verbatim from the pretraining script.
-# This is not optional boilerplate: PyTorch's load_state_dict
-# matches parameters by name, and the names come from how the
-# class is written (self.query, self.key, self.blocks[i]...).
-# If this class definition drifts even slightly from the one
-# used to produce the checkpoint, loading will fail or silently
-# load into the wrong tensors.
-# ============================================================
 class Head(nn.Module):
     def __init__(self, emb_dim, head_size, block_size):
         super().__init__()
@@ -75,7 +54,6 @@ class Head(nn.Module):
         out = wei @ v
         return out
 
-
 class MultiHeadAttention(nn.Module):
     def __init__(self, num_heads, emb_dim, head_size, block_size):
         super().__init__()
@@ -88,7 +66,6 @@ class MultiHeadAttention(nn.Module):
         out = self.proj(out)
         out = self.dropout(out)
         return out
-
 
 class Block(nn.Module):
     def __init__(self, num_heads, emb_dim, head_size, block_size):
@@ -108,7 +85,6 @@ class Block(nn.Module):
         x = x + self.ffwd(self.ln2(x))
         return x
 
-
 class GPTLanguageModel(nn.Module):
     def __init__(self, use_checkpointing=False):
         super().__init__()
@@ -125,11 +101,6 @@ class GPTLanguageModel(nn.Module):
         self.lm_head = nn.Linear(emb_dim, vocab_size)
         self.lm_head.weight = self.token_embedding_table.weight
 
-        # This still runs on construction and randomly initializes every
-        # weight. That's fine and expected — we immediately overwrite all
-        # of it a few lines down with load_state_dict(). We are NOT
-        # relying on this init for fine-tuning; it's just a leftover
-        # side effect of building an nn.Module the normal way.
         self.apply(self._init_weights)
 
     def _init_weights(self, module):
@@ -184,7 +155,7 @@ class GPTLanguageModel(nn.Module):
 def create_optimizer(model, learning_rate):
     decay, no_decay = [], []
     for n, p in model.named_parameters():
-        if not p.requires_grad:   # NOTE: frozen params (see below) are skipped here automatically
+        if not p.requires_grad: #frozen params are skipped here automatically
             continue
         if p.dim() < 2:
             no_decay.append(p)
@@ -197,20 +168,10 @@ def create_optimizer(model, learning_rate):
     ], lr=learning_rate, betas=(0.9, 0.95))
 
 
-# ============================================================
 # Load the pretrained checkpoint
-# ============================================================
-PRETRAIN_CKPT_PATH = "/kaggle/working/tiny_stories_checkpoint_step12000.pt"  # <-- point at your actual final/best checkpoint
 
-# --- CHANGED: optionally freeze early layers.
-# In a GPT, early blocks tend to learn generic, low-level structure
-# (local syntax, token co-occurrence) while later blocks specialize
-# more toward the task/style. Freezing 0 means "fine-tune everything",
-# which is the standard and usually best choice when your fine-tune
-# dataset is reasonably sized. Set this > 0 only if your fine-tune
-# dataset is tiny and you're worried about catastrophic forgetting /
-# overfitting — freezing reduces both the risk and the compute cost,
-# at the expense of flexibility.
+PRETRAIN_CKPT_PATH = "/kaggle/working/tiny_stories_checkpoint_step12000.pt"
+
 FREEZE_FIRST_N_BLOCKS = 0
 
 print("Loading pretrained checkpoint...")
@@ -234,27 +195,8 @@ if torch.cuda.device_count() > 1:
     print(f"Using {torch.cuda.device_count()} GPUs via DataParallel")
     model = nn.DataParallel(model)
 
-# --- CHANGED: much lower learning rate than pretraining.
-# Pretraining's max_lr was 3e-4, chosen because the model started from
-# random noise and needed large updates to learn anything at all. The
-# fine-tuning model already sits in a good region of the loss landscape;
-# large updates now would just as easily destroy what it learned
-# (catastrophic forgetting) as improve it. A common rule of thumb is
-# 1/10th to 1/100th of the pretraining peak LR. Starting at 1/10th here.
 finetune_lr = 3e-5
 optimizer = create_optimizer(model, finetune_lr)
-
-# --- CHANGED: deliberately NOT loading ckpt['optimizer_state_dict'].
-# AdamW keeps running estimates of each parameter's gradient mean and
-# variance (its momentum). Those estimates were tuned for a completely
-# different learning rate (3e-4) and a completely different data
-# distribution (the pretraining corpus). Carrying them over into
-# fine-tuning at 3e-5 tends to produce a mismatched, sometimes unstable
-# first few hundred steps. Starting the optimizer fresh is the more
-# common and more predictable choice. (If you ever need to *resume* a
-# fine-tuning run that was interrupted, that's the one case where you
-# *would* reload optimizer_state_dict — because then it matches the
-# same LR and data you're continuing with.)
 
 print(f"Fine-tuning on device: {device}")
 train_losses, val_losses, steps_logged = [], [], []
@@ -276,16 +218,6 @@ def estimate_loss(eval_iters=10):
     model.train()
     return losses
 
-
-# --- CHANGED: much shorter schedule.
-# Pretraining used a 1200-step warmup over a 30000-step run because it
-# was covering a huge, diverse corpus from scratch. Fine-tuning datasets
-# are almost always far smaller, and the model doesn't need to "relearn
-# how to model language" — it just needs to adapt. A short warmup avoids
-# an unstable first few steps at the new (much smaller) LR, and a short
-# total step count matches a smaller dataset and reduces overfitting risk.
-# Treat max_steps as an upper bound — early stopping below will likely
-# cut the run short anyway.
 eval_interval = 50
 warmup_steps = 100
 max_steps = 3000
@@ -301,11 +233,6 @@ def get_lr(step):
     coeff = 0.5 * (1.0 + np.cos(np.pi * decay_ratio))
     return min_lr + coeff * (max_lr - min_lr)
 
-# --- NEW: early stopping.
-# Fine-tune sets are typically small enough that the model can start
-# memorizing them (val loss rising while train loss keeps falling) well
-# before max_steps. patience * eval_interval is how many steps we
-# tolerate without a new best val loss before we stop.
 best_val_loss = float('inf')
 patience = 5
 patience_counter = 0
@@ -327,10 +254,6 @@ for i in range(start_step, max_steps + 1):
     scaler.step(optimizer)
     scaler.update()
 
-    # --- CHANGED: checkpoint filename says "finetuned" so it can never
-    # collide with or overwrite a pretraining checkpoint, and saves more
-    # frequently (every 500 vs every 1000 steps) since the whole run is
-    # much shorter.
     if i % 500 == 0 and i > 0:
         raw_model = model.module if isinstance(model, nn.DataParallel) else model
         torch.save({
@@ -346,8 +269,6 @@ for i in range(start_step, max_steps + 1):
         steps_logged.append(i)
         print(f"step {i}: train {losses['train']:.4f}, val {losses['val']:.4f}, lr {lr:.2e}")
 
-        # --- NEW: track + save the best checkpoint by val loss, and
-        # stop once val loss stalls for `patience` evals in a row.
         if losses['val'] < best_val_loss:
             best_val_loss = losses['val']
             patience_counter = 0

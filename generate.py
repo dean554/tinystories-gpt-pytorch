@@ -6,27 +6,20 @@ import torch.nn.functional as F
 from tokenizers import Tokenizer
 import numpy
 
-# ==========================================
-# HYPERPARAMETERS & CONFIG (Must match training)
-# ==========================================
 tokenizer_path = "/kaggle/working/tinystories_vocab.json"
-checkpoint_path = "/kaggle/working/tiny_stories_checkpoint_step12000.pt" # Update with your desired checkpoint step
+checkpoint_path = "/kaggle/working/tiny_stories_checkpoint_step12000.pt" 
 
 emb_dim = 1024
 block_size = 512
 num_heads = 8
 head_size = emb_dim // num_heads
 num_layers = 12
-dropout = 0.0 # Set dropout to 0 for inference
+dropout = 0.0 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
-# Load tokenizer to get vocab size
 tokenizer = Tokenizer.from_file(tokenizer_path)
 vocab_size = tokenizer.get_vocab_size()
 
-# ==========================================
-# MODEL ARCHITECTURE
-# ==========================================
 class Head(nn.Module):
     def __init__(self, emb_dim, head_size, block_size):
         super().__init__()
@@ -131,11 +124,8 @@ class GPTLanguageModel(nn.Module):
             
         return idx
 
-# ==========================================
-# INFERENCE PIPELINE
-# ==========================================
 def generate_story(prompt, max_new_tokens=200, temperature=0.8, top_k=50):
-    # DUAL GPU KAGGLE FIX: Clear leftover memory from the training loop
+    # DUAL GPU KAGGLE : Clear leftover memory from the training loop
     gc.collect()
     if torch.cuda.is_available():
         torch.cuda.empty_cache()
@@ -143,7 +133,7 @@ def generate_story(prompt, max_new_tokens=200, temperature=0.8, top_k=50):
     print("Loading model...")
     model = GPTLanguageModel().to(device)
     
-    # DUAL GPU KAGGLE FIX: Wrap model in DataParallel if multiple GPUs are available
+    # DUAL GPU KAGGLE : Wrap model in DataParallel if multiple GPUs are available
     if torch.cuda.device_count() > 1:
         print(f"Using {torch.cuda.device_count()} GPUs via DataParallel for inference")
         model = nn.DataParallel(model)
@@ -152,7 +142,6 @@ def generate_story(prompt, max_new_tokens=200, temperature=0.8, top_k=50):
     if not os.path.exists(checkpoint_path):
         raise FileNotFoundError(f"Checkpoint not found at {checkpoint_path}")
     
-    # Strict Security Fix
     with torch.serialization.safe_globals([
         numpy._core.multiarray.scalar, 
         numpy.dtype,
@@ -176,7 +165,6 @@ def generate_story(prompt, max_new_tokens=200, temperature=0.8, top_k=50):
     
     # Generate
     with torch.amp.autocast('cuda', dtype=torch.float16):
-        # We call generate on raw_model because DataParallel doesn't natively expose custom methods
         out_ids = raw_model.generate(idx, max_new_tokens, temperature=temperature, top_k=top_k)
     
     # Decode and format output
@@ -186,6 +174,5 @@ def generate_story(prompt, max_new_tokens=200, temperature=0.8, top_k=50):
     return generated_text
 
 if __name__ == "__main__":
-    # Example usage
     prompt_text = "Once upon a time, there was a little boy named Tom."
     generate_story(prompt=prompt_text, max_new_tokens=500, temperature=0.7, top_k=40)

@@ -6,10 +6,10 @@ tokenizer = Tokenizer.from_file("/kaggle/working/tinystories_vocab.json")
 eot_id = tokenizer.token_to_id("<|endoftext|>")
 
 SEP = "<|endoftext|>"
-CHUNK_CHARS = 1_000_000  # read ~1MB of text at a time
+CHUNK_CHARS = 1_000_000
 
 def story_count(txt_path, sep=SEP, chunk_chars=CHUNK_CHARS):
-    """Cheap first pass: count separators without holding the file in memory."""
+    # first pass: count separators without holding the file in memory.
     count = 0
     with open(txt_path, "r", encoding="utf-8") as f:
         while True:
@@ -20,7 +20,7 @@ def story_count(txt_path, sep=SEP, chunk_chars=CHUNK_CHARS):
     return count
 
 def stream_stories(txt_path, sep=SEP, chunk_chars=CHUNK_CHARS):
-    """Reads the file in small chunks and yields one story at a time."""
+    # Reads the file in small chunks and yields one story at a time.
     buffer = ""
     with open(txt_path, "r", encoding="utf-8") as f:
         while True:

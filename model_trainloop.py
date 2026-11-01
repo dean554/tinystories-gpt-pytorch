@@ -48,7 +48,6 @@ class Head(nn.Module):
         v = self.value(x)
         wei = q @ k.transpose(-2, -1) * (k.shape[-1] ** -0.5)
         
-        # FIX 1: Prevent NaNs in fp16
         wei = wei.masked_fill(self.tril[:T, :T] == 0, torch.finfo(wei.dtype).min)
         
         wei = F.softmax(wei, dim=-1)
